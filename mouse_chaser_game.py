@@ -8,7 +8,7 @@ import pygame
 pygame.init()
 WIDTH, HEIGHT = 900, 600
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Mouse Chaser")
+pygame.display.set_caption("Mouse Chaser - Treadmill Game")
 clock = pygame.time.Clock()
 
 # Colors
@@ -43,27 +43,44 @@ class Player:
         self.drag = 0.84
         self.color = PLAYER_COLORS[0]
         self.flash_timer = 0.0
+        self.boosted = False
 
     def update(self, dt, mouse_x, mouse_y):
         dx = mouse_x - self.x
         dy = mouse_y - self.y
         dist = math.hypot(dx, dy)
 
-        boost_active = BOOST_ZONE.collidepoint(mouse_x, mouse_y)
-        stop_active = STOP_ZONE.collidepoint(mouse_x, mouse_y)
+        # Check if BOTH player and mouse are in boost zone (treadmill)
+        player_in_boost = BOOST_ZONE.collidepoint(self.x, self.y)
+        mouse_in_boost = BOOST_ZONE.collidepoint(mouse_x, mouse_y)
+        both_in_boost = player_in_boost and mouse_in_boost
 
-        target_speed = self.speed
-        if boost_active:
-            target_speed = self.boost_speed
-            self.flash_timer = 0.25
+        # Check if BOTH player and mouse are in stop zone
+        player_in_stop = STOP_ZONE.collidepoint(self.x, self.y)
+        mouse_in_stop = STOP_ZONE.collidepoint(mouse_x, mouse_y)
+        both_in_stop = player_in_stop and mouse_in_stop
+
+        # Update color and effects
+        if both_in_boost:
             self.color = (135, 255, 150)
-        elif stop_active:
+            self.flash_timer = 0.25
+            self.boosted = True
+        elif both_in_stop:
             self.color = (255, 120, 120)
+            self.boosted = False
         else:
             self.color = PLAYER_COLORS[0]
             self.flash_timer = max(0, self.flash_timer - dt)
+            self.boosted = False
 
-        if not stop_active and not boost_active:
+        target_speed = self.speed
+        
+        # If both in boost zone, use boost speed (treadmill effect)
+        if both_in_boost:
+            target_speed = self.boost_speed
+
+        # Move toward mouse normally UNLESS both in stop zone
+        if not both_in_stop:
             if dist > 1:
                 # Movement toward mouse
                 desired_vx = (dx / dist) * target_speed
@@ -71,7 +88,7 @@ class Player:
                 self.vx += (desired_vx - self.vx) * 0.12
                 self.vy += (desired_vy - self.vy) * 0.12
         else:
-            # Stop moving when mouse is inside boost or stop zone
+            # Both player and mouse in stop zone - stop completely
             self.vx *= 0.72
             self.vy *= 0.72
 
@@ -160,10 +177,12 @@ while running:
     # Update player
     player.update(dt, mouse_x, mouse_y)
 
-    # Particles for boost area
-    if BOOST_ZONE.collidepoint(player.x, player.y):
-        add_particles(player.x, player.y, (120, 255, 140), 2)
-    if STOP_ZONE.collidepoint(player.x, player.y):
+    # Particles for boost area when both in boost zone
+    if BOOST_ZONE.collidepoint(player.x, player.y) and BOOST_ZONE.collidepoint(mouse_x, mouse_y):
+        add_particles(player.x, player.y, (120, 255, 140), 3)
+    
+    # Particles for stop area when both in stop zone
+    if STOP_ZONE.collidepoint(player.x, player.y) and STOP_ZONE.collidepoint(mouse_x, mouse_y):
         add_particles(player.x, player.y, (255, 100, 100), 2)
 
     # Update particles
@@ -188,19 +207,23 @@ while running:
     for y in range(0, HEIGHT, 60):
         pygame.draw.line(screen, (40, 48, 60), (0, y), (WIDTH, y), 1)
 
-    # Draw boost rectangle
+    # Draw boost rectangle (treadmill)
     pygame.draw.rect(screen, BOOST_SHADOW, BOOST_ZONE.inflate(10, 10), border_radius=10)
     pygame.draw.rect(screen, BOOST_COLOR, BOOST_ZONE, border_radius=10)
     pygame.draw.rect(screen, (255, 255, 255, 120), BOOST_ZONE, 2, border_radius=10)
-    boost_label = font.render("BOOST", True, WHITE)
-    screen.blit(boost_label, (BOOST_ZONE.x + 18, BOOST_ZONE.y + 12))
+    boost_label = font.render("TREADMILL", True, WHITE)
+    screen.blit(boost_label, (BOOST_ZONE.x + 10, BOOST_ZONE.y + 12))
+    boost_label2 = small_font.render("(Speed Boost)", True, WHITE)
+    screen.blit(boost_label2, (BOOST_ZONE.x + 20, BOOST_ZONE.y + 45))
 
     # Draw stop rectangle
     pygame.draw.rect(screen, STOP_SHADOW, STOP_ZONE.inflate(10, 10), border_radius=10)
     pygame.draw.rect(screen, STOP_COLOR, STOP_ZONE, border_radius=10)
     pygame.draw.rect(screen, (255, 255, 255, 120), STOP_ZONE, 2, border_radius=10)
-    stop_label = font.render("STOP", True, WHITE)
+    stop_label = font.render("STOP ZONE", True, WHITE)
     screen.blit(stop_label, (STOP_ZONE.x + 18, STOP_ZONE.y + 12))
+    stop_label2 = small_font.render("(Freeze)", True, WHITE)
+    screen.blit(stop_label2, (STOP_ZONE.x + 35, STOP_ZONE.y + 45))
 
     # Draw particle effects
     for p in particles:
@@ -215,7 +238,7 @@ while running:
     pygame.draw.circle(screen, GOLD, (mouse_x, mouse_y), 5, 1)
 
     # Text instructions
-    hint = small_font.render("Move your mouse • Green zone = player speeds up • Red zone = player stops moving", True, TEXT)
+    hint = small_font.render("Get the player into the boxes with your mouse! Green = Speed Boost Forever | Red = Stop Moving", True, TEXT)
     screen.blit(hint, (18, HEIGHT - 28))
 
     pygame.display.flip()
